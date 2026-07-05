@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>URL Shortener — DevOps Project</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; max-width: 600px; margin: 80px auto; padding: 0 20px; background: #0f172a; color: #e2e8f0; }
+  h1 { font-size: 1.6rem; }
+  input { width: 70%; padding: 10px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #fff; }
+  button { padding: 10px 16px; border-radius: 6px; border: none; background: #6366f1; color: white; cursor: pointer; }
+  button:hover { background: #4f46e5; }
+  #result { margin-top: 20px; padding: 12px; background: #1e293b; border-radius: 6px; word-break: break-all; display: none; }
+  a { color: #818cf8; }
+</style>
+</head>
+<body>
+  <h1>🔗 URL Shortener</h1>
+  <p>A beginner DevOps project — Docker, CI/CD, Terraform, Kubernetes, Prometheus, all wired to this tiny app.</p>
+  <input id="urlInput" type="text" placeholder="https://example.com/very/long/link">
+  <button onclick="shorten()">Shorten</button>
+  <div id="result"></div>
+
+<script>
+async function shorten() {
+  const input = document.getElementById('urlInput').value;
+  const resultDiv = document.getElementById('result');
+  try {
+    const res = await fetch('/api/shorten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ originalUrl: input })
+    });
+    const data = await res.json();
+    resultDiv.style.display = 'block';
+    if (res.ok) {
+      resultDiv.innerHTML = `Short URL: <a href="${data.shortUrl}" target="_blank">${data.shortUrl}</a>`;
+    } else {
+      resultDiv.innerHTML = `Error: ${data.error}`;
+    }
+  } catch (err) {
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = 'Error reaching server.';
+  }
+}
+</script>
+</body>
+</html>

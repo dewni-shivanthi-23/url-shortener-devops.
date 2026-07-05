@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'url-shortener-app'
+    static_configs:
+      - targets: ['app:3000']   # 'app' matches the docker-compose service name
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

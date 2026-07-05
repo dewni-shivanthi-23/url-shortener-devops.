@@ -1,0 +1,73 @@
+---
+- name: Configure server and deploy URL shortener
+  hosts: app_servers
+  become: true
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Pull the latest app image
+      community.docker.docker_image:
+        name: "{{ dockerhub_username }}/url-shortener:latest"
+        source: pull
+
+    - name: Run MongoDB container
+      community.docker.docker_container:
+        name: mongo
+        image: mongo:7
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "27017:27017"
+
+    - name: Run the app container
+      community.docker.docker_container:
+        name: url-shortener-app
+        image: "{{ dockerhub_username }}/url-shortener:latest"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "3000:3000"
+        env:
+          MONGO_URI: "mongodb://mongo:27017/urlshortener"
+        links:
+          - mongo
