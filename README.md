@@ -5,14 +5,15 @@ Docker → CI → Terraform → Ansible → Kubernetes → CD → Monitoring →
 
 ```
 Code push → GitHub Actions (test, build, scan) → Image pushed to Docker Hub
-   → Terraform provisions AWS server → Ansible configures it & deploys
+   → Terraform provisions an Azure VM → Ansible configures it & deploys
    → (or) Kubernetes runs it with autoscaling → Prometheus/Grafana monitor it live
 ```
+
+> 📘 For a full beginner-friendly walkthrough with explanations at every step, see **AZURE-GUIDE.md**.
 
 ---
 
 ## Phase 0: Run it locally (no DevOps yet — just prove the app works)
-
 ```bash
 cd app
 npm install
@@ -47,51 +48,75 @@ Concepts you're learning: Dockerfile layers, multi-stage builds, non-root users,
 1. Push this repo to GitHub.
 2. In your repo settings → **Secrets and variables → Actions**, add:
    - `DOCKERHUB_USERNAME`
-   - `DOCKERHUB_TOKEN` (create one at hub.docker.com → Account Settings → Security)
+   - `DOCKERHUB_TOKEN` (create one at hub.docker.com → Account Settings → Security — make sure it has **Read & Write** access, not read-only)
 3. Push to `main`. Go to the **Actions** tab and watch it: run tests → build image → scan with Trivy → push to Docker Hub.
 
 This is `.github/workflows/ci-cd.yml`. Every commit now automatically produces a tested, scanned, versioned image — no manual `docker build` ever again.
 
 ---
 
-## Phase 3: Terraform (provision a real server on AWS)
+## Phase 3: Terraform (provision a real server on Azure)
 
-Requires an AWS account (Free Tier is enough) and the AWS CLI configured (`aws configure`).
+Requires an Azure account (Free Tier or Azure for Students both work) and the Azure CLI configured (`az login`).
 
 ```bash
-cd terraform
+cd terraform-azure
 terraform init
-terraform plan -var="key_pair_name=YOUR_EC2_KEY_PAIR_NAME"
-terraform apply -var="key_pair_name=YOUR_EC2_KEY_PAIR_NAME"
+terraform plan
+terraform apply
 ```
-Note the `instance_public_ip` output — you'll need it in Phase 4.
+Note the `vm_public_ip` output — you'll need it in Phase 4.
 
-To tear it down when done (important, avoids AWS charges):
+> ⚠️ **Azure for Students note:** student subscriptions restrict which regions and VM sizes you can use. If `terraform apply` fails with `RequestDisallowedByAzure`, run this to find your account's allowed regions:
+> ```bash
+> az policy assignment list --query "[?contains(policyDefinitionId, 'e56962a6-4747-49cd-b67b-bf8b01975c4c')].{name:displayName, allowedRegions:parameters.listOfAllowedLocations.value}" -o json
+> ```
+> Then update `location` in `variables.tf` to one of the allowed regions. If you also hit `SkuNotAvailable`, try a different VM size (`Standard_B1ms`, `Standard_B2s`, or `Standard_D2s_v3`) in `main.tf`.
+
+To tear it down when done (important — avoids using up your Azure credit):
 ```bash
-terraform destroy -var="key_pair_name=YOUR_EC2_KEY_PAIR_NAME"
+terraform destroy
 ```
 
 ---
 
 ## Phase 4: Ansible (configure the server & deploy)
 
-1. Edit `ansible/inventory.ini` — put the IP from Terraform's output.
-2. Run:
-```bash
-cd ansible
-ansible-playbook -i inventory.ini playbook.yml --extra-vars "dockerhub_username=YOUR_DOCKERHUB_USERNAME"
-```
-This installs Docker on the fresh server and starts your app + MongoDB containers automatically — no manual SSH steps.
+Ansible doesn't run natively on Windows — install **WSL2** first (`wsl --install` in an Administrator PowerShell, then restart), then run everything below inside the Ubuntu terminal it installs.
 
-Visit `http://<instance_public_ip>:3000` — your app is now live on real cloud infrastructure.
+1. Edit `ansible/inventory-azure.ini` — put the IP from Terraform's `vm_public_ip` output.
+2. Copy your SSH key into the Linux environment if using WSL:
+   ```bash
+   mkdir -p ~/.ssh
+   cp /mnt/c/Users/<you>/.ssh/id_rsa ~/.ssh/
+   cp /mnt/c/Users/<you>/.ssh/id_rsa.pub ~/.ssh/
+   chmod 600 ~/.ssh/id_rsa
+   ```
+3. The first time connecting to a new server, SSH in manually once to accept its host key (Ansible can't answer that prompt itself):
+   ```bash
+   ssh azureuser@<vm_public_ip>
+   exit
+   ```
+4. Run the playbook:
+   ```bash
+   cd ansible
+   ansible-playbook -i inventory-azure.ini playbook.yml --extra-vars "dockerhub_username=YOUR_DOCKERHUB_USERNAME"
+   ```
+
+This installs Docker on the fresh server and starts your app + MongoDB containers automatically — no manual SSH configuration steps.
+
+Visit `http://<vm_public_ip>:3000` — your app is now live on real cloud infrastructure.
 
 ---
 
 ## Phase 5: Kubernetes (orchestration)
 
-Try it locally first with **Minikube**:
+Try it locally first with **Minikube**. On Windows, if VirtualBox fails with a virtualization error, use the Docker driver instead (works alongside Docker Desktop with no BIOS changes needed):
 ```bash
-minikube start
+minikube start --driver=docker
+```
+Then:
+```bash
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/mongo-pvc.yaml
 kubectl apply -f k8s/deployment.yaml
@@ -104,7 +129,7 @@ minikube service url-shortener-service --url
 ```
 > Replace `YOUR_DOCKERHUB_USERNAME` in `k8s/deployment.yaml` with your actual Docker Hub image before applying.
 
-Once comfortable, do the same against a managed cluster like **AWS EKS** or **DigitalOcean Kubernetes**.
+Once comfortable, do the same against a managed cluster like **Azure Kubernetes Service (AKS)**.
 
 ---
 
@@ -132,11 +157,11 @@ In Grafana (http://localhost:3001):
 
 - Trivy scan already runs in CI (`ci-cd.yml`) — set `exit-code: '1'` once you want builds to fail on critical CVEs.
 - The Docker image runs as a **non-root user** (see `Dockerfile`).
-- Next steps to add yourself: store secrets in AWS Secrets Manager instead of `.env`, add HTTPS via `cert-manager` if deployed on Kubernetes with Ingress.
+- Next steps to add yourself: store secrets in **Azure Key Vault** instead of `.env`, add HTTPS via `cert-manager` if deployed on Kubernetes with Ingress.
 
 ---
 
-## Architecture Diagram (recreate this in draw.io/Excalidraw for your README/LinkedIn post)
+## Architecture Diagram
 
 ```
  [Developer] --push--> [GitHub] --triggers--> [GitHub Actions CI]
@@ -149,7 +174,7 @@ In Grafana (http://localhost:3001):
                           -----------------------------------------------
                           |                                             |
                  [Terraform + Ansible]                         [Kubernetes Cluster]
-                 provisions EC2 & deploys                       (Deployment + HPA)
+                 provisions Azure VM & deploys                  (Deployment + HPA)
                           |                                             |
                           -----------------------------------------------
                                                      |
@@ -159,4 +184,3 @@ In Grafana (http://localhost:3001):
 ```
 
 ---
-
