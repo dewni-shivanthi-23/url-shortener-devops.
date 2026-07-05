@@ -160,14 +160,3 @@ In Grafana (http://localhost:3001):
 
 ---
 
-## Putting This on LinkedIn
-
-1. **Push to GitHub**, pin the repo on your profile, add topics: `docker`, `kubernetes`, `terraform`, `ansible`, `cicd`, `devops`, `prometheus`.
-2. **Record a 60-90 second demo**: show a `git push`, jump to the GitHub Actions tab going green, then show the live app and the Grafana dashboard. Use Loom or OBS.
-3. **Write the post** using this structure:
-   - Hook: "I built a URL shortener to learn DevOps — here's the pipeline behind it 👇"
-   - The architecture diagram image (this stops the scroll far more than a link)
-   - 4-5 bullet points: what each tool does in one line
-   - The GitHub link + demo video
-   - Tag it: #devops #docker #kubernetes #terraform #cicd
-4. Mention what broke and how you fixed it — a two-line "biggest challenge" note makes it far more credible than a polished tutorial recap.
